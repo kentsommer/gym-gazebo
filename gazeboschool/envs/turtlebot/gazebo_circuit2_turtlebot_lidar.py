@@ -41,7 +41,6 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
         low = np.array([0.0, -1.0])
         high = np.array([1.0, 1.0])
         self.action_space = spaces.Box(low, high)
-        # self.action_space = spaces.Discrete(3) #F,L,R
 
         high = np.ones(self.obs_dim)
         low = np.zeros(self.obs_dim)
@@ -150,10 +149,7 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
 
     def _build_state(self, scan, robot_pose, target_pose):
         relative_pose = self._get_relative_pose(robot_pose, target_pose)
-        # distance = self._get_distance(robot_pose, target_pose)
-        # distance = np.asarray([distance])
         state =  np.concatenate((scan, relative_pose), axis=0)
-        # state =  np.concatenate((scan, distance), axis=0)
         return state
 
 
@@ -174,26 +170,17 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
     def _reward(self, robot_pose, target_pose, action, done):
         distance = self._get_distance(robot_pose, target_pose)
 
-        beta = 9 # 5 is OKAY not GREAT
+        beta = 5 # 5 is OKAY not GREAT
 
         if done:
             done = True
-            return -100, done # -25 is OKAY not GREAT
+            return -25, done # -25 is OKAY not GREAT
 
         elif distance < 1.5:
             done = True
             return 100, done # 100 is OKAY not GREAT
 
-        # else:
-        #     reward = 20 * (self.prev_distance - distance)
-
-        #     # if abs(action[1]) <= 0.025 and action[0] > 0.25:
-        #     #     reward += 5
-        #     # else:
-        #     #     reward -= 0.5
-
         reward = beta * np.e * (self.prev_distance - distance)
-        # print(reward)
 
         return reward, done
 
