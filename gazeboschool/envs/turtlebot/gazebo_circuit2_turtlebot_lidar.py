@@ -30,8 +30,12 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
         self.delete_proxy = rospy.ServiceProxy('gazebo/delete_model', DeleteModel)
         self.spawn_proxy = rospy.ServiceProxy('/gazebo/spawn_sdf_model', SpawnModel)
         self.prev_distance = None
+        self.prev_action = [0., 0.]
+        self.time_step = 0
+        self.max_time_steps = 250
         self.scan_dim = 20
-        self.obs_dim = self.scan_dim + 2
+        self.obs_dim = self.scan_dim + 4
+        self.min_range = 0.2
 
         # Load target xml for respawning
         target_xml_path = os.path.expandvars('$GAZEBO_MODEL_PATH/Target/model.sdf')
@@ -50,24 +54,42 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
         self._seed()
 
 
+    # def discretize_observation(self,data):
+    #     discretized_ranges = []
+    #     min_range = 0.2
+    #     done = False
+    #     mod = len(data.ranges) / 20 
+    #     for i, item in enumerate(data.ranges):
+    #         if (i%mod==0):
+    #             if data.ranges[i] == float ('Inf') or np.isinf(data.ranges[i]):
+    #                 discretized_ranges.append(20.0)
+    #             elif np.isnan(data.ranges[i]):
+    #                 discretized_ranges.append(0.0)
+    #             else:
+    #                 discretized_ranges.append(data.ranges[i])
+    #         if (min_range > data.ranges[i] > 0):
+    #             done = True
+    #     x = np.asarray(discretized_ranges)
+    #     new_ranges = (x-0.0) / (20.0-0.0)
+    #     return new_ranges,done
+
+
     def discretize_observation(self,data):
-        discretized_ranges = []
-        min_range = 0.2
         done = False
-        mod = len(data.ranges) / 20 
-        for i, item in enumerate(data.ranges):
-            if (i%mod==0):
-                if data.ranges[i] == float ('Inf') or np.isinf(data.ranges[i]):
-                    discretized_ranges.append(20.0)
-                elif np.isnan(data.ranges[i]):
-                    discretized_ranges.append(0.0)
-                else:
-                    discretized_ranges.append(data.ranges[i])
-            if (min_range > data.ranges[i] > 0):
+        oldmin, oldmax = 0.06, 15.
+        oldrange = oldmax - oldmin
+        newmin, newmax = 0., 1.
+        newrange = newmax - newmin
+        scale = newrange / oldrange
+
+        for i in range(len(data.ranges)):
+            # Check if we are too close to obstacle
+            if (self.min_range > data.ranges[i] > 0):
                 done = True
-        x = np.asarray(discretized_ranges)
-        new_ranges = (x-0.0) / (20.0-0.0)
-        return new_ranges,done
+
+        normalized_obs = [(v - oldmin) * scale + newmin for v in data.ranges]
+        obs = np.asarray(normalized_obs)
+        return obs, done
 
 
     def _seed(self, seed=None):
@@ -149,7 +171,7 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
 
     def _build_state(self, scan, robot_pose, target_pose):
         relative_pose = self._get_relative_pose(robot_pose, target_pose)
-        state =  np.concatenate((scan, relative_pose), axis=0)
+        state =  np.concatenate((scan, relative_pose, self.prev_action), axis=0)
         return state
 
 
@@ -172,10 +194,9 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
 
         beta = 5 # 5 is OKAY not GREAT
 
-        if done:
+        if done or self.time_step > self.max_time_steps:
             done = True
-            return -25, done # -25 is OKAY not GREAT
-
+            return -35, done # -25 is OKAY not GREAT
         elif distance < 1.5:
             done = True
             return 100, done # 100 is OKAY not GREAT
@@ -186,7 +207,7 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
 
 
     def _step(self, action):
-
+        self.time_step += 1
         rospy.wait_for_service('/gazebo/unpause_physics')
         try:
             self.unpause()
@@ -212,11 +233,11 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
         reward, done = self._reward(robot_pose, target_pose, action, done)
 
         self._update_distance(robot_pose, target_pose)
-
+        self.prev_action = action
         return state, reward, done, {}
 
     def _reset(self):
-
+        self.time_step = 0
         # Resets the state of the environment and returns an initial observation.
         rospy.wait_for_service('/gazebo/reset_simulation')
         try:
@@ -269,5 +290,6 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
 
         # Set initial previous distance
         self._update_distance(robot_pose, target_pose)
+        self.prev_action = [0., 0.]
 
         return state

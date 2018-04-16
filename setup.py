@@ -16,6 +16,8 @@ setup(name='gazeboschool-gym',
 		'matplotlib',
 		'defusedxml',
 		'scikit-image',
+		'rospkg',
+		'catkin_pkg'
       ],
       description='The OpenAI Gym for robotics: A toolkit for developing and comparing your reinforcement learning agents using Gazebo and ROS.',
       author='Erle Robotics',

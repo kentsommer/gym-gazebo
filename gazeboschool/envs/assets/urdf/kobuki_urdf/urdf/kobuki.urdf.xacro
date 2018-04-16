@@ -233,7 +233,7 @@
     ros_topic="sonar_front"
     update_rate="10"
     min_range="0.06"
-    max_range="20.0"
+    max_range="15.0"
     field_of_view_horizontal="${270*M_PI/180}"
     field_of_view_vertical="${1*M_PI/180}"
     ray_count_horizontal="40"
