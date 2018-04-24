@@ -4,6 +4,7 @@ import roslaunch
 import time
 import numpy as np
 import os
+import math
 
 from gym import utils, spaces
 from gazeboschool.envs import gazebo_env
@@ -15,6 +16,7 @@ from gazebo_msgs.srv import *
 from gazebo_msgs.msg import *
 
 from tf import TransformListener
+from tf.transformations import euler_from_quaternion
 
 from gym.utils import seeding
 
@@ -54,26 +56,6 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
         self._seed()
 
 
-    # def discretize_observation(self,data):
-    #     discretized_ranges = []
-    #     min_range = 0.2
-    #     done = False
-    #     mod = len(data.ranges) / 20 
-    #     for i, item in enumerate(data.ranges):
-    #         if (i%mod==0):
-    #             if data.ranges[i] == float ('Inf') or np.isinf(data.ranges[i]):
-    #                 discretized_ranges.append(20.0)
-    #             elif np.isnan(data.ranges[i]):
-    #                 discretized_ranges.append(0.0)
-    #             else:
-    #                 discretized_ranges.append(data.ranges[i])
-    #         if (min_range > data.ranges[i] > 0):
-    #             done = True
-    #     x = np.asarray(discretized_ranges)
-    #     new_ranges = (x-0.0) / (20.0-0.0)
-    #     return new_ranges,done
-
-
     def discretize_observation(self,data):
         done = False
         oldmin, oldmax = 0.06, 15.
@@ -89,6 +71,7 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
 
         normalized_obs = [(v - oldmin) * scale + newmin for v in data.ranges]
         obs = np.asarray(normalized_obs)
+        # print(obs)
         return obs, done
 
 
@@ -105,6 +88,41 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
         position = get_model_state(model).pose.position
         result = np.asarray([position.x, position.y])
         return result
+
+
+    def _get_distance_and_bearing_to_target(self, robot_pose, target_pose, model_name='mobile_base'):
+        get_model_state = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
+        model = GetModelStateRequest()
+        model.model_name = model_name
+        q = get_model_state(model).pose.orientation
+        ql = [q.x, q.y, q.z, q.w]
+        _, _, yaw = euler_from_quaternion(ql)
+        angle = math.radians((math.degrees(yaw) - 90) % 360)
+
+        p = self._get_relative_pose(robot_pose, target_pose)
+        P = np.array([[p[0]], [p[1]]])
+
+        R = np.array([[math.cos(angle), -math.sin(angle)],
+                      [math.sin(angle),  math.cos(angle)]])
+
+        x = np.array([[1], [0]])
+        y = np.array([[0], [1]])
+        xp = np.dot(R, x)
+        yp = np.dot(R, y)
+        Ainv = np.linalg.inv(np.concatenate((xp, yp), 1))
+
+        RP = np.dot(Ainv, P)
+
+        relative_pose = [RP[0, 0], RP[1, 0]]
+        distance = self._get_distance(robot_pose, relative_pose)
+        bearing = math.atan2(relative_pose[1], relative_pose[0])
+
+        # print(relative_pose)
+        # print(bearing)
+        # print(distance)
+        # print('\n\n')
+
+        return distance, bearing
 
 
     def _get_data(self):
@@ -126,8 +144,8 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
 
 
     def _get_valid_target_state(self):
-        x = np.random.uniform(-8.4, 5.6)
-        y = np.random.randint(-8.304, 8.49)
+        x = np.random.uniform(-6, 6)
+        y = np.random.randint(-4, 4)
 
         target_state = ModelState()
         target_state.model_name = 'Target'
@@ -149,8 +167,8 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
 
 
     def _spawn_target(self):
-        x = np.random.randint(1, 13)
-        y = np.random.randint(0, 11)
+        x = np.random.randint(-6, 6)
+        y = np.random.randint(-4, 4)
 
         pose = Pose()
         pose.position.x = float(x)
@@ -170,7 +188,9 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
 
 
     def _build_state(self, scan, robot_pose, target_pose):
-        relative_pose = self._get_relative_pose(robot_pose, target_pose)
+        # relative_pose = self._get_relative_pose(robot_pose, target_pose)
+        distance, bearing = self._get_distance_and_bearing_to_target(robot_pose, target_pose)
+        relative_pose = np.asarray([distance, bearing])
         state =  np.concatenate((scan, relative_pose, self.prev_action), axis=0)
         return state
 
@@ -194,10 +214,13 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
 
         beta = 5 # 5 is OKAY not GREAT
 
-        if done or self.time_step > self.max_time_steps:
+        if self.time_step > self.max_time_steps:
+            done = True
+            return -5, done
+        if done:
             done = True
             return -35, done # -25 is OKAY not GREAT
-        elif distance < 1.5:
+        if distance < 1.5:
             done = True
             return 100, done # 100 is OKAY not GREAT
 
@@ -220,6 +243,7 @@ class GazeboCircuit2TurtlebotLidarEnv(gazebo_env.GazeboEnv):
         self.vel_pub.publish(vel_cmd)
 
         scan, robot_pose, target_pose = self._get_data()
+        # print(robot_pose)
 
         rospy.wait_for_service('/gazebo/pause_physics')
         try:

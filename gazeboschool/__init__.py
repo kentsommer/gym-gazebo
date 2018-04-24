@@ -8,8 +8,15 @@ logger = logging.getLogger(__name__)
 
 # Turtlebot envs
 register(
-    id='GazeboCircuit2TurtlebotLidar-v0',
+    id='TurtlebotNavLidar-v0',
     entry_point='gazeboschool.envs.turtlebot:GazeboCircuit2TurtlebotLidarEnv',
+    max_episode_steps=10000,
+    # More arguments here
+)
+
+register(
+    id='TurtlebotNavDepth-v0',
+    entry_point='gazeboschool.envs.turtlebot:GazeboCircuit2TurtlebotDepthEnv',
     max_episode_steps=10000,
     # More arguments here
 )

@@ -29,14 +29,15 @@ class GazeboCircuit2TurtlebotDepthEnv(gazebo_env.GazeboEnv):
         self.bridge = CvBridge()
         self.obs_dim = 20
 
-        low = np.array([0.05, -0.3])
-        high = np.array([0.5, 0.3])
+        low = np.array([0, -1])
+        high = np.array([1, 1])
         self.action_space = spaces.Box(low, high)
         # self.action_space = spaces.Discrete(3) #F,L,R
 
         high = np.ones(self.obs_dim)
         low = np.zeros(self.obs_dim)
-        self.observation_space = spaces.Box(low, high)
+        # self.observation_space = spaces.Box(low, high)
+        self.observation_space = spaces.Box(low=0, high=255, shape=(480, 640, 1), dtype=np.uint8)
         self.reward_range = (-np.inf, np.inf)
 
 
@@ -53,6 +54,7 @@ class GazeboCircuit2TurtlebotDepthEnv(gazebo_env.GazeboEnv):
         cv_image_array = np.array(cv_image, dtype = np.dtype('f8'))
         cv_image_norm = cv2.normalize(cv_image_array, cv_image_array, 0, 1, cv2.NORM_MINMAX)
         cv_final = cv_image_norm
+        print(cv_final.shape)
         # cv_final = cv2.resize(cv_image_norm, (128, 128))
         cv2.imshow("Depth Image", cv_final)
         cv2.waitKey(1)

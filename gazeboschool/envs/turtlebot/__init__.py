@@ -1,1 +1,2 @@
 from gazeboschool.envs.turtlebot.gazebo_circuit2_turtlebot_lidar import GazeboCircuit2TurtlebotLidarEnv
+from gazeboschool.envs.turtlebot.gazebo_circuit2_turtlebot_camera import GazeboCircuit2TurtlebotDepthEnv
